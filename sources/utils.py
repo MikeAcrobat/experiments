@@ -22,6 +22,8 @@ def resize(image, width = None, height = None, inter = cv2.INTER_AREA):
 
 def show_images(images):
     for i, image in zip(range(len(images)), images):
+        if image is None:
+            continue
         cv2.imshow(str(i), image)
         cv2.moveWindow(str(i), i * 350, 0)
 

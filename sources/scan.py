@@ -4,7 +4,7 @@ import os
 import utils
 from skimage.filters import threshold_adaptive
 
-image_path = os.path.join("images", "receipts", "receipt3.jpg")
+image_path = os.path.join("images", "receipts", "receipt1.jpg")
 
 image = cv2.imread(image_path)
 
@@ -26,22 +26,73 @@ for i, contour in enumerate(contours):
 
 contours = sorted(contours, key=customKey, reverse=True)
 
-print(contours[0])
+warped_image = None
 
-cv2.drawContours(resized, contours[:2], -1, (0, 255, 0), 2)
+contour = np.append(contours[0], contours[1], axis=0)
 
-'''
-temp = edged.copy()
-lines = cv2.HoughLinesP(temp, 10, 180 * 3.14 / 180.0, 1)
-if lines is not None:
-    for line in lines[0]:
-        print line
-        cv2.line(resized, (line[0], line[1]), (line[2], line[3]), (0, 0, 255), 2)
-'''
+if len(contour) >= 4:
+    contour = contour.reshape(len(contour), 2)
 
-#gray = threshold_adaptive(gray, 11, "gaussian", 0, "nearest").astype("uint8") * 255
+    rect = np.zeros((4, 2), dtype = "float32")
+    '''
+    [0] . [1]
+     .     .
+    [3] . [2]
+    '''
+    sum = contour.sum(axis = 1)
+    rect[0] = contour[np.argmin(sum)]
+    rect[2] = contour[np.argmax(sum)]
 
-utils.show_images([resized, edged, blurred])
+    diff = np.diff(contour, axis=1)
+    rect[1] = contour[np.argmin(diff)]
+    rect[3] = contour[np.argmax(diff)]
+
+    (tl, tr, br, bl) = rect
+
+    width_top = np.sqrt(((tr[0] - tl[0]) ** 2) + ((tr[1] - tl[1]) ** 2))
+    width_bot = np.sqrt(((br[0] - bl[0]) ** 2) + ((br[1] - bl[1]) ** 2))
+    
+    height_left  = np.sqrt(((tl[0] - bl[0]) ** 2) + ((tl[1] - bl[1]) ** 2))
+    height_right = np.sqrt(((tr[0] - br[0]) ** 2) + ((tr[1] - br[1]) ** 2))
+
+    max_width = max(int(width_bot), int(width_bot))
+    max_height = max(int(height_left), int(height_right))
+
+    fixed_rect = np.array([
+        [0, 0], 
+        [max_width - 1, 0], 
+        [max_width - 1, max_height - 1], 
+        [0, max_height - 1]], dtype="float32")
+
+    matrix = cv2.getPerspectiveTransform(rect, fixed_rect)
+    warped_image = cv2.warpPerspective(resized, matrix, (max_width, max_height))
+    warped_image = cv2.cvtColor(warped_image, cv2.COLOR_BGR2GRAY)
+
+cv2.drawContours(resized, contours, -1, (0, 255, 0), 2)
+
+utils.show_images([resized, edged, warped_image])
+
+radius = 1
+offset = 0
+
+def apply():
+    copy_image = threshold_adaptive(warped_image, radius, "gaussian", offset, "nearest")
+    copy_image = copy_image.astype("uint8") * 255
+    cv2.imshow("2", copy_image)
+
+def callback_radius(value):
+    if value % 2 == 1:
+        global radius
+        radius = value
+        apply()
+
+def callback_offset(value):
+    global offset
+    offset = value
+    apply()
+
+cv2.createTrackbar("radius", "2", 1, 251, callback_radius)
+cv2.createTrackbar("offset", "2", 0, 100, callback_offset)
 
 utils.wait_esc_key()
 
